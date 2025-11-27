@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
 import { registerSchema, loginSchema } from "../validations/auth.validation.js";
 
-const JWT_EXPIRES = process.env.JWT_EXPIRES || "7d";
+const JWT_EXPIRES = process.env.JWT_EXPIRES ;
 
 export const register = async (req, res) => {
   try {
