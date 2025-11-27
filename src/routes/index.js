@@ -10,7 +10,8 @@ import citiesRoute from "./cities.route.js";
 import receptionRoutes from "./reception.route.js";
 import bookingPublicRoutes from "./bookingPublic.route.js";
 import paymentRoutes from "./payment.route.js";
-
+import reviewRoutes from "./review.routes.js";
+import notificationRoutes from "./notification.route.js";
 
 const router = Router();
 router.use("/auth", auth);
@@ -25,5 +26,8 @@ router.use("/reception", receptionRoutes);
 router.use("/public", bookingPublicRoutes);
 
 router.use("/payment", paymentRoutes);
+
+router.use("/reviews", reviewRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

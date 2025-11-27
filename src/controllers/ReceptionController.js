@@ -3,6 +3,7 @@ import { Hotel } from "../models/Hotel.js";
 import { Room } from "../models/Room.js";
 import { staffCreateBookingSchema, addPaymentSchema, queryRangeSchema } from "../validations/booking.validation.js";
 import { ROLE } from "../constants/roles.js";
+import Review from "../models/Review.js";
 
 // ——— Helpers quyền
 const roleNames = (req) => (req.user?.roles || []).map(r => String(r).toUpperCase());
@@ -374,3 +375,37 @@ export const updateRooms = async (req, res, next) => {
     next(e);
   }
 };
+
+
+
+
+
+export const canReview = async (req, res) => {
+  try {
+    const { hotelId } = req.params;
+
+    // Tìm booking đã checkout của user tại khách sạn đó
+    const booking = await Booking.findOne({
+      hotel: hotelId,
+      user: req.user._id,
+      status: "CHECKED_OUT", // tùy bạn đặt tên status
+    }).sort({ check_out: -1 }); // lấy booking mới nhất
+
+    if (!booking) {
+      return res.json({ canReview: false, bookingId: null });
+    }
+
+    const existed = await Review.findOne({ booking: booking._id });
+    if (existed) {
+      return res.json({ canReview: false, bookingId: null });
+    }
+
+    res.json({ canReview: true, bookingId: booking._id });
+  } catch (err) {
+    console.error("canReview error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+

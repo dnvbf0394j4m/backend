@@ -3,6 +3,9 @@ import dayjs from "dayjs";
 import { Booking } from "../models/Booking.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
+import { authRequired } from "../middlewares/auth.middleware.js";
+import { requireRoles } from "../middlewares/role.middleware.js";
+import { getMyBookings } from "../controllers/BookingController.js";
 
 const router = Router();
 
@@ -79,5 +82,12 @@ router.post("/", async (req, res) => {
     session.endSession();
   }
 });
+
+  router.get(
+  "/my",
+  authRequired,
+  requireRoles("USER"), // nếu bạn dùng phân quyền
+  getMyBookings
+);
 
 export default router;

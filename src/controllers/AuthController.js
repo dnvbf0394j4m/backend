@@ -4,10 +4,10 @@ import { registerSchema, loginSchema } from "../validations/auth.validation.js";
 
 const JWT_EXPIRES = process.env.JWT_EXPIRES || "7d";
 
-export const register =  async (req, res) => {
+export const register = async (req, res) => {
   try {
-    const { value, error } = registerSchema.validate(req.body);
-    console.log(value);
+    const { value, error } = registerSchema.validate(req.body,{ stripUnknown: true });
+    
     if (error) return res.status(400).json({ error: error.message });
 
     const exists = await User.findOne({ email: value.email });
@@ -24,102 +24,85 @@ export const register =  async (req, res) => {
 };
 
 
-// export const login =async (req, res) => {
+// ❌ VÍ DỤ KHÔNG AN TOÀN
+// export const register = async (req, res) => {
 //   try {
-//     const { value, error } = loginSchema.validate(req.body);
-//     if (error) return res.status(400).json({ error: error.message });
+    
+//     const user = new User(req.body);   // <-- mass assignment
+//     await user.setPassword(req.body.password);
+//     await user.save();
 
-//     const user = await User.findOne({ email: value.email });
-//     if (!user) return res.status(401).json({ error: "Invalid credentials" });
-
-//     const ok = await user.verifyPassword(value.password);
-//     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
-
-//     const token = jwt.sign(
-//       { sub: user._id.toString(), roles: user.roles },
-//       process.env.JWT_SECRET,
-//       { expiresIn: process.env.JWT_EXPIRES || "7d" }
-//     );
-//     res.json({ token });
+//     res.status(201).json({ id: user._id, email: user.email, roles: user.roles });
 //   } catch (e) {
 //     res.status(400).json({ error: e.message });
 //   }
 // };
 
 
+
+const ACCESS_EXPIRES = process.env.JWT_EXPIRES || "15m";
+const REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || "30d";
+
 export const login = async (req, res) => {
   try {
-    // 1) Validate input
-    if (loginSchema) {
-  const { value, error } = loginSchema.validate(req.body);
-  if (error) {
-    // Lấy lỗi đầu tiên
-    const detail = error.details?.[0];
+    // validate như bạn đang làm
+    const { value, error } = loginSchema.validate(req.body);
+    if (error) { /* ... như cũ ... */ }
 
-    let msg = detail?.message || error.message;
-
-    // Tuỳ biến theo field
-    if (detail?.path?.[0] === "email") {
-      msg = "Email không hợp lệ. Vui lòng nhập đúng định dạng (vd: abc@gmail.com)";
-    } else if (detail?.path?.[0] === "password") {
-      msg = "Mật khẩu không được để trống";
-    }
-
-    return res.status(400).json({ error: msg });
-  }
-  req.body = value;
-}
-
-
-    const { email, password } = req.body;
-
-    // 2) Tìm user theo email
-    // (Nếu bạn cấu hình password_hash select:false thì cần .select("+password_hash"))
+    const { email, password } = value;
     const user = await User.findOne({ email })
-      .populate("hotel", "name")     // chỉ cần _id + name
-      .populate("company", "name");  // chỉ cần _id + name
-
+      .populate("hotel", "name")
+      .populate("company", "name");
     if (!user || user.isDeleted) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // 3) Kiểm tra password
     const ok = await user.verifyPassword(password);
     if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-    // 4) Tạo JWT (payload nhẹ, không nhét cả user)
-    // Lưu ý: roles của bạn đang là mảng string (["ADMIN",...])
-    const payload = {
+    // ---- 1) Tạo access token sống ngắn
+    const accessPayload = {
       sub: user._id.toString(),
       roles: (user.roles || []).map(r => String(r).toUpperCase()),
-      // có thể thêm company/hotel để FE đọc nhanh:
       company: user.company?._id || null,
       hotel: user.hotel?._id || null,
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES });
+    const accessToken = jwt.sign(accessPayload, process.env.JWT_SECRET, {
+      expiresIn: ACCESS_EXPIRES,
+    });
 
-    // 5) (Tuỳ chọn) đánh dấu firstLogin=false sau lần đầu
-    const SHOULD_CLEAR_FIRST_LOGIN = false; // đổi true nếu muốn
-    if (SHOULD_CLEAR_FIRST_LOGIN && user.firstLogin) {
-      user.firstLogin = false;
-      await user.save();
-    }
+    // ---- 2) Tạo refresh token sống dài
+    const refreshPayload = { sub: user._id.toString() };
+    const refreshToken = jwt.sign(
+      refreshPayload,
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: REFRESH_EXPIRES }
+    );
 
-    // 6) Trả về token + user info gọn gàng cho FE
+    // Lưu refreshToken vào DB (để sau này có thể revoke)
+    user.refreshTokens = user.refreshTokens || [];
+    user.refreshTokens.push({ token: refreshToken, createdAt: new Date() });
+    await user.save();
+
+    // ---- 3) Gửi refresh token bằng HTTP-Only Cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false, // lên https thì để true
+      sameSite: "strict",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    // ---- 4) Trả access token + user info cho FE
     res.json({
-      token,
+      accessToken,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        roles: (user.roles || []).map(r => String(r).toUpperCase()),
-        hotel: user.hotel
-          ? { id: user.hotel._id, name: user.hotel.name }
-          : null,
-        company: user.company
-          ? { id: user.company._id, name: user.company.name }
-          : null,
+        roles: accessPayload.roles,
+        hotel: user.hotel ? { id: user.hotel._id, name: user.hotel.name } : null,
+        company: user.company ? { id: user.company._id, name: user.company.name } : null,
         firstLogin: user.firstLogin,
       },
     });
@@ -128,3 +111,45 @@ export const login = async (req, res) => {
     res.status(400).json({ error: e.message || "Login error" });
   }
 };
+
+
+export const refreshToken = async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken; // lấy từ cookie
+    if (!token) return res.status(401).json({ error: "No refresh token" });
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    } catch (e) {
+      return res.status(403).json({ error: "Invalid refresh token" });
+    }
+
+    const user = await User.findById(payload.sub);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const exists = (user.refreshTokens || []).some(t => t.token === token);
+    if (!exists) {
+      return res.status(403).json({ error: "Refresh token not recognized" });
+    }
+
+    const accessPayload = {
+      sub: user._id.toString(),
+      roles: (user.roles || []).map(r => String(r).toUpperCase()),
+      company: user.company || null,
+      hotel: user.hotel || null,
+    };
+
+    const newAccessToken = jwt.sign(
+      accessPayload,
+      process.env.JWT_SECRET,
+      { expiresIn: ACCESS_EXPIRES }
+    );
+
+    return res.json({ accessToken: newAccessToken });
+  } catch (e) {
+    console.error("Refresh error:", e);
+    res.status(400).json({ error: "Refresh failed" });
+  }
+};
+

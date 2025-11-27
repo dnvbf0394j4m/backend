@@ -49,6 +49,8 @@ const BookingSchema = new Schema(
       },
     ],
 
+    user: { type: Schema.Types.ObjectId, ref: "User", index: true },  // khách là user đã đăng ký
+    reviewed: { type: Boolean, default: false },
     start_day: { type: Date, required: true, index: true },
     end_day:   { type: Date, required: true, index: true },
 

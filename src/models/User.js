@@ -11,10 +11,15 @@ const UserSchema = new mongoose.Schema(
     firstLogin: { type: Boolean, default: true },
     roles: [{ type: String, index: true }],   // dùng String cho khớp Role._id
     company: { type: mongoose.Schema.Types.ObjectId, ref: "Company" }, // optional nếu có Company model sau
-    hotel: { type: mongoose.Schema.Types.ObjectId, ref: "Hotel" } ,     // optional nếu có Hotel model sau
-      // 🔽 Soft delete
+    hotel: { type: mongoose.Schema.Types.ObjectId, ref: "Hotel" },     // optional nếu có Hotel model sau
+    // 🔽 Soft delete
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
+    refreshTokens: [{
+      token: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+    }],
+
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

@@ -9,7 +9,7 @@ import { ROLE } from "../constants/roles.js";
 
 const router = Router();
 
-// List: ADMIN thấy tất cả, ADMINHOTEL chỉ thấy của company mình
+
 router.get("/", authRequired, requireAdminOrAdminHotel, Hotels.list);
 
 router.get("/public/list", Hotels.publicList);
@@ -17,7 +17,7 @@ router.get("/public/:id", Hotels.publicDetail);
 router.get("/public/:id/available-rooms", Hotels.publicAvailableRooms);
 
 
-// Detail: đã enforce sở hữu ở middleware (ADMIN bỏ qua)
+
 router.get("/:id", authRequired, requireAdminOrAdminHotel, enforceHotelOwnership, Hotels.detail);
 
 // Create: ADMINHOTEL bị ép company=req.user.company; ADMIN có thể chỉ định company
@@ -26,7 +26,7 @@ router.post(
   "/",
   authRequired,
  
-  requireRoles(ROLE.ADMIN, ROLE.ADMIN_HOTEL),       // <-- đúng tên hằng
+  requireRoles(ROLE.ADMIN, ROLE.ADMIN_HOTEL),      
 
   uploadHotelImages.array("images", 10),
 
