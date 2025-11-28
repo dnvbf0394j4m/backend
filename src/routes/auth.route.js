@@ -13,6 +13,8 @@ router.post("/register", Auth.register);
 
 
 router.post("/login", Auth.login);
-router.post("/refresh-token", Auth.refreshToken);
+router.post("/ok", Auth.refreshToken);
+router.post("/logout", Auth.ok);
+
 
 export default router;

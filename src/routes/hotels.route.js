@@ -26,7 +26,7 @@ router.post(
   "/",
   authRequired,
  
-  requireRoles(ROLE.ADMIN, ROLE.ADMIN_HOTEL),      
+  requireRoles(ROLE.ADMIN,ROLE.ADMIN_HOTEL),      
 
   uploadHotelImages.array("images", 10),
 

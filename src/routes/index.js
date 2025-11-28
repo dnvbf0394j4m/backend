@@ -12,6 +12,7 @@ import bookingPublicRoutes from "./bookingPublic.route.js";
 import paymentRoutes from "./payment.route.js";
 import reviewRoutes from "./review.routes.js";
 import notificationRoutes from "./notification.route.js";
+import area from "./area.route.js";
 
 const router = Router();
 router.use("/auth", auth);
@@ -29,5 +30,6 @@ router.use("/payment", paymentRoutes);
 
 router.use("/reviews", reviewRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/areas", area);
 
 export default router;
