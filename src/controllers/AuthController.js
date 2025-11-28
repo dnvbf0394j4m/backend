@@ -198,6 +198,16 @@ import { registerSchema, loginSchema } from "../validations/auth.validation.js";
 const ACCESS_EXPIRES = "15m";
 const REFRESH_EXPIRES = "30d";
 
+const isProd = process.env.NODE_ENV === "production";
+
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProd,                      // PROD: true (Vercel/Render https)
+  sameSite: isProd ? "none" : "lax",   // PROD: "none" để gửi cross-site
+  path: "/",                           // route nào cũng thấy được cookie
+  maxAge: 30 * 24 * 60 * 60 * 1000,
+};
+
 // ============ REGISTER (giữ nguyên như cũ) ============
 export const register = async (req, res) => {
   try {
@@ -274,13 +284,7 @@ export const login = async (req, res) => {
     await user.save();
 
     // ⭐ COOKIE CHUẨN LOCALHOST
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: false,      // localhost dùng http
-      sameSite: "lax",    // ok cho localhost:5173 -> localhost:4000
-      path: "/",          // mọi route đều thấy
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions);
 
     res.json({
       accessToken,
@@ -351,12 +355,7 @@ export const refreshToken = async (req, res) => {
 
     if (!exists) {
       console.warn("🔁 [REFRESH] token not in user.refreshTokens");
-      res.clearCookie("refreshToken", {
-        httpOnly: true,
-        secure: false,
-        sameSite: "lax",
-        path: "/",
-      });
+      res.clearCookie("refreshToken", refreshCookieOptions);
       return res
         .status(403)
         .json({ error: "Refresh token not recognized" });
