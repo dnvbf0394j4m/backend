@@ -28,7 +28,10 @@ app.use("/uploads", express.static("uploads"));
 const allowedOrigins = [
   process.env.CLIENT_URL,
   "http://localhost:5173",
+  "https://booking-one-pi.vercel.app",   // Vercel production
+  "https://booking-one-pi-git-main-longcas-projects.vercel.app",  // preview build
 ];
+
 
 app.use(
   cors({
