@@ -7,13 +7,13 @@ import rateLimit from "express-rate-limit";
  */
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 phút
-  max: 20,                  // tối đa 20 request / 15 phút / IP
+  max: 5,                  // tối đa 20 request / 15 phút / IP
   standardHeaders: true,    // thêm header X-RateLimit-*
   legacyHeaders: false,
   message: {
     error: "Too many login attempts, please try again later.",
   },
-});
+}); 
 
 /**
  * Giới hạn tạo booking online + VNPay để chống spam

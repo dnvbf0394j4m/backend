@@ -5,8 +5,20 @@ const UserSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, trim: true, lowercase: true, index: true, unique: true, sparse: true },
-    password_hash: { type: String, required: true },
+    provider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+    },
+    password_hash: {
+      type: String,
+      required: function () {
+        // Nếu là local thì bắt buộc có password
+        return this.provider === "local";
+      },
+    },
     phone: { type: String, trim: true, index: true, sparse: true },
+
     create_at: { type: Date, default: Date.now },
     firstLogin: { type: Boolean, default: true },
     roles: [{ type: String, index: true }],   // dùng String cho khớp Role._id
@@ -19,7 +31,7 @@ const UserSchema = new mongoose.Schema(
       token: { type: String, required: true },
       createdAt: { type: Date, default: Date.now },
     }],
-     tokenVersion: { type: Number, default: 0 },
+    tokenVersion: { type: Number, default: 0 },
 
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }

@@ -16,8 +16,16 @@ const HotelSchema = new Schema(
     description: { type: String, trim: true },
     address: { type: String, trim: true },
 
+    // 🟢 LOẠI CHỖ Ở: HOTEL / APARTMENT / RESORT / ...
+    type: {
+      type: String,
+      enum: ["HOTEL", "APARTMENT", "RESORT", "HOMESTAY", "VILLA"],
+      default: "HOTEL",
+      index: true,
+    },
+
     // priceHotel: DECIMAL(10,2)
-    priceHotel: { type: Money, required: true },  // lưu Decimal128
+    priceHotel: { type: Money, required: true }, // lưu Decimal128
     discount: { type: Number, min: 0, max: 100, default: 0 },
 
     isDelete: { type: Boolean, default: false }, // soft-delete
@@ -29,12 +37,11 @@ const HotelSchema = new Schema(
     // },
 
     // Nếu muốn giữ lat/lng riêng như JPA (tùy): có thể bỏ nếu dùng location
-    lat: { type: Number },  // optional: đồng bộ từ location
+    lat: { type: Number }, // optional: đồng bộ từ location
     lng: { type: Number },
 
-    checkInTime: { type: String, validate: v => !v || timeRegex.test(v) },
-    checkOutTime: { type: String, validate: v => !v || timeRegex.test(v) },
-
+    checkInTime: { type: String, validate: (v) => !v || timeRegex.test(v) },
+    checkOutTime: { type: String, validate: (v) => !v || timeRegex.test(v) },
 
     rating: {
       type: Number,
@@ -51,7 +58,15 @@ const HotelSchema = new Schema(
 
     tags: {
       type: [String],
-      default: [],   // ví dụ: ['Miễn phí huỷ', 'Bao gồm ăn sáng']
+      default: [], // ví dụ: ['Miễn phí huỷ', 'Bao gồm ăn sáng']
+    },
+
+    // 🟢 TIỆN NGHI – dùng chung với filter frontend
+    // ví dụ: ["wifi", "pool", "breakfast"]
+    amenities: {
+      type: [String],
+      default: [],
+      index: true,
     },
 
     // ManyToOne
@@ -70,8 +85,9 @@ const HotelSchema = new Schema(
 // Index
 HotelSchema.index({ name: 1 });
 HotelSchema.index({ company: 1, name: 1 });
-HotelSchema.index({ "location": "2dsphere" }); // để query gần/địa lý
-
+HotelSchema.index({ location: "2dsphere" }); // để query gần/địa lý
+HotelSchema.index({ type: 1 });
+HotelSchema.index({ amenities: 1 });
 
 HotelSchema.virtual("rooms", {
   ref: "Room",

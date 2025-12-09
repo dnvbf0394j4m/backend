@@ -8,7 +8,7 @@ import Review from "../models/Review.js";
 // ——— Helpers quyền
 const roleNames = (req) => (req.user?.roles || []).map(r => String(r).toUpperCase());
 const isStaff       = (req) => roleNames(req).includes(ROLE.STAFF);
-const isAdminHotel  = (req) => roleNames(req).includes(ROLE.ADMINHOTEL);
+const isAdminHotel  = (req) => roleNames(req).includes(ROLE.ADMIN_HOTEL);
 const isAdmin       = (req) => roleNames(req).includes(ROLE.ADMIN);
 
 // ——— Helpers nghiệp vụ
@@ -409,3 +409,126 @@ export const canReview = async (req, res) => {
 
 
 
+// ——— API: list booking theo company (cho ADMIN / ADMIN_HOTEL)
+// GET /api/admin/bookings/company?from=2025-01-01&to=2025-01-31&status=PAID&hotel=<hotelId>&page=1&limit=20
+export const listByCompany = async (req, res, next) => {
+  try {
+    const roles = roleNames(req);
+    const isAdminRole = roles.includes(ROLE.ADMIN);
+    const isAdminHotelRole = roles.includes(ROLE.ADMIN_HOTEL);
+
+    if (!isAdminRole && !isAdminHotelRole) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    // Xác định companyId
+    let companyId = null;
+
+    if (isAdminRole) {
+      // ADMIN tổng: phải truyền ?company=... vào query
+      companyId = req.query.company || null;
+      if (!companyId) {
+        return res
+          .status(400)
+          .json({ error: "company query is required for admin" });
+      }
+    } else {
+      // ADMIN_HOTEL: dùng company của user
+      if (!req.user.company) {
+        return res
+          .status(400)
+          .json({ error: "Your account has no company assigned" });
+      }
+      companyId = req.user.company;
+    }
+
+    // Parse khoảng ngày (optional)
+    let from = req.query.from ? new Date(req.query.from) : null;
+    let to = req.query.to ? new Date(req.query.to) : null;
+
+    // Nếu không truyền from/to -> mặc định 30 ngày gần nhất
+    if (!from && !to) {
+      to = new Date();
+      from = new Date();
+      from.setDate(to.getDate() - 30);
+    }
+
+    const q = {
+      isDeleted: false,
+      company: companyId,
+    };
+
+    // Lọc theo khoảng ngày: overlap (tương tự hàm list)
+    if (from) q.end_day = { ...(q.end_day || {}), $gt: from };
+    if (to) q.start_day = { ...(q.start_day || {}), $lt: to };
+
+    // Lọc theo status
+    if (req.query.status) {
+      q.status = req.query.status;
+    }
+
+    // Lọc theo hotel trong company đó
+    if (req.query.hotel) {
+      q.hotel = req.query.hotel;
+    }
+
+    // (Optional) search theo gì đó nếu bạn có trường customer_name / customerPhone
+    if (req.query.q && req.query.q.trim()) {
+      const rx = new RegExp(req.query.q.trim(), "i");
+      // tùy schema của bạn mà chỉnh
+      q.$or = [
+        { "customer.name": rx },
+        { "customer.phone": rx },
+        { orderCode: rx },
+      ];
+    }
+
+    // Phân trang
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(
+      Math.max(parseInt(req.query.limit || "20", 10), 1),
+      100
+    );
+    const skip = (page - 1) * limit;
+
+    // Sắp xếp
+    let sort = { start_day: -1 }; // mới nhất trước
+    if (req.query.sort) {
+      // ví dụ: sort=start_day:asc hoặc sort=amount:desc
+      const [field, dirRaw] = String(req.query.sort).split(":");
+      const dir = (dirRaw || "asc").toLowerCase() === "desc" ? -1 : 1;
+      if (field) sort = { [field]: dir };
+    }
+
+    // Query & count
+    const [items, total] = await Promise.all([
+      Booking.find(q)
+        .populate("hotel", "name")
+        .populate("rooms.room", "name number")
+        .populate("createdBy", "name")
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Booking.countDocuments(q),
+    ]);
+
+    const pages = Math.ceil(total / limit);
+
+    return res.json({
+      data: items,
+      pagination: { page, limit, total, pages },
+      sort,
+      filters: {
+        company: companyId,
+        from: from?.toISOString() || null,
+        to: to?.toISOString() || null,
+        status: req.query.status || null,
+        hotel: req.query.hotel || null,
+        q: req.query.q || null,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+};

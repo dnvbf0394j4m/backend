@@ -12,7 +12,6 @@ const norm = s => String(s || "").trim().toUpperCase();
 
 export function requireRoles(...allowed) {
   const allow = new Set(allowed.map(norm));
-  console.log("[DEBUG] requireRoles allowed:", [...allow]);
   return (req, res, next) => {
     const roleNames = (req.user?.roles || []).map(norm);
     // console.log("[DEBUG] roles:", roleNames, "allowed:", [...allow]);

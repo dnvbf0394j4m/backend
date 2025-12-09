@@ -13,8 +13,13 @@ import paymentRoutes from "./payment.route.js";
 import reviewRoutes from "./review.routes.js";
 import notificationRoutes from "./notification.route.js";
 import area from "./area.route.js";
+import passport from "../config/passport.js";
+import staff from "./employee.route.js";
+import adminBookingRoutes from "./adminBooking.route.js";
+import dashboard  from "./dashboard.route.js";
 
 const router = Router();
+router.use(passport.initialize());
 router.use("/auth", auth);
 router.use("/users", users);
 router.use("/roles", roles);
@@ -25,9 +30,10 @@ router.use("/hotels", hotelsRouter);
 router.use("/cities", citiesRoute);
 router.use("/reception", receptionRoutes);
 router.use("/public", bookingPublicRoutes);
-
+router.use("/staff", staff);
+router.use("/admin/bookings", adminBookingRoutes);
 router.use("/payment", paymentRoutes);
-
+router.use("/dashboard", dashboard);
 router.use("/reviews", reviewRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/areas", area);

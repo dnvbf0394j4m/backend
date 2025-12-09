@@ -139,18 +139,42 @@ export const list = async (req, res, next) => {
 
 export const publicList = async (req, res, next) => {
   try {
-    const { city, area, search } = req.query;
+    // 🟢 LẤY THÊM type + amenities TỪ QUERY
+    const { city, area, search, type, amenities } = req.query;
 
     // 1) Filter cơ bản theo vị trí + search
     const q = { isDelete: false }; // soft delete hotel
 
     if (city) q.city = city;
     if (area) q.area = area;
-    if (search) q.name = { $regex: search, $options: "i" };
+
+    // search theo tên + địa chỉ cho tiện
+    if (search && search.trim()) {
+      const rx = new RegExp(search.trim(), "i");
+      q.$or = [{ name: rx }, { address: rx }];
+    }
+
+    // 🟢 FILTER LOẠI CHỖ Ở (HOTEL / APARTMENT / RESORT / ...)
+    if (type) {
+      q.type = type; // phải trùng enum trong HotelSchema
+    }
+
+    // 🟢 FILTER TIỆN NGHI (amenities=wifi,pool,breakfast)
+    if (amenities) {
+      const amenityList = amenities
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+      if (amenityList.length > 0) {
+        // yêu cầu KS phải có TẤT CẢ tiện nghi đã chọn
+        q.amenities = { $all: amenityList };
+      }
+    }
 
     let hotels = await Hotel.find(q)
       .select(
-        "name description address priceHotel discount city area hotelImages lat lng rating reviewCount tags"
+        "name description address priceHotel discount city area hotelImages lat lng rating reviewCount tags type amenities"
       )
       .populate("city", "name")
       .populate("area", "name")
@@ -164,6 +188,8 @@ export const publicList = async (req, res, next) => {
       rating: Number(h.rating || 0),
       reviewCount: Number(h.reviewCount || 0),
       tags: h.tags || [],
+      amenities: h.amenities || [],
+      type: h.type || "HOTEL",
     }));
 
     // 3) Đọc param ngày & số người
@@ -267,6 +293,7 @@ export const publicList = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 // GET /api/hotels/public/:id/available-rooms
@@ -685,43 +712,91 @@ export const create = async (req, res, next) => {
 // PUT/PATCH /api/hotels/:id
 export const update = async (req, res, next) => {
   try {
-    const { value, error } = updateHotelSchema.validate(req.body, { abortEarly: false });
-    if (error) return res.status(400).json({ error: error.message });
+    // ❌ BỎ validate Joi – dùng trực tiếp req.body
+    const value = req.body || {};
+    console.log("Update hotel payload:", value);
 
     const hotel = await Hotel.findById(req.params.id);
-    if (!hotel || hotel.isDelete) return res.status(404).json({ error: "Hotel not found" });
+    if (!hotel || hotel.isDelete) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
 
+    // ====== CẬP NHẬT CÁC FIELD SIMPLE ======
     if (value.name != null) hotel.name = value.name;
     if (value.description !== undefined) hotel.description = value.description;
     if (value.address !== undefined) hotel.address = value.address;
 
-    if (value.priceHotel !== undefined) hotel.priceHotel = toDecimal128(value.priceHotel);
-    if (value.discount !== undefined) hotel.discount = value.discount;
-
-    if (value.location) {
-      hotel.location = value.location;
-      hotel.lat = undefined; hotel.lng = undefined;
-    } else {
-      if (value.lat != null) hotel.lat = value.lat;
-      if (value.lng != null) hotel.lng = value.lng;
-      if (hotel.lat != null && hotel.lng != null) hotel.setLatLng(hotel.lat, hotel.lng);
+    // priceHotel: convert sang number rồi Decimal128
+    if (value.priceHotel !== undefined) {
+      const priceNum = Number(value.priceHotel);
+      if (Number.isFinite(priceNum)) {
+        hotel.priceHotel = toDecimal128(priceNum);
+      }
     }
 
-    if (value.checkInTime !== undefined) hotel.checkInTime = value.checkInTime || undefined;
-    if (value.checkOutTime !== undefined) hotel.checkOutTime = value.checkOutTime || undefined;
+    if (value.discount !== undefined) {
+      hotel.discount = Number(value.discount);
+    }
 
-    if (value.city !== undefined) hotel.city = value.city || undefined;
-    if (value.area !== undefined) hotel.area = value.area || undefined;
+    // type & amenities (nếu bạn đang dùng)
+    if (value.type !== undefined) {
+      hotel.type = value.type;
+    }
+    if (value.amenities !== undefined) {
+      hotel.amenities = Array.isArray(value.amenities)
+        ? value.amenities
+        : [];
+    }
+
+    // ====== VỊ TRÍ ======
+    if (value.location) {
+      // nếu client gửi hẳn location { type, coordinates }
+      hotel.location = value.location;
+      hotel.lat = undefined;
+      hotel.lng = undefined;
+    } else {
+      // chỉ sửa lat/lng nếu client gửi
+      if (value.lat != null) hotel.lat = Number(value.lat);
+      if (value.lng != null) hotel.lng = Number(value.lng);
+
+      // nếu đủ lat + lng thì sync sang location
+      if (hotel.lat != null && hotel.lng != null) {
+        hotel.setLatLng(hotel.lat, hotel.lng);
+      }
+    }
+
+    // ====== GIỜ NHẬN/TRẢ PHÒNG ======
+    if (value.checkInTime !== undefined) {
+      hotel.checkInTime = value.checkInTime || undefined;
+    }
+    if (value.checkOutTime !== undefined) {
+      hotel.checkOutTime = value.checkOutTime || undefined;
+    }
+
+    // ====== CITY / AREA ======
+    if (value.city !== undefined) {
+      hotel.city = value.city || undefined;
+    }
+    if (value.area !== undefined) {
+      hotel.area = value.area || undefined;
+    }
+
 
     await hotel.save();
 
     const out = await Hotel.findById(hotel._id)
       .populate("company", "name")
+      .populate("hotelImages", "image_url") // ✅ populate ảnh cho response
       .lean();
 
-    res.json({ message: "Hotel updated", hotel: out });
-  } catch (e) { next(e); }
+    return res.json({ message: "Hotel updated", hotel: out });
+  } catch (e) {
+    console.log("Update hotel error:", e);
+    next(e);
+  }
 };
+
+
 
 // DELETE /api/hotels/:id  (soft delete; hard delete qua ?force=1)
 export const remove = async (req, res, next) => {
