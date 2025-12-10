@@ -43,4 +43,14 @@ router.patch("/:id/restore", authRequired, requireAdminOrAdminHotel, enforceHote
 
 router.get("/:id/rooms", authRequired, Hotels.listRoomsOfHotel);
 
+
+// Upload 1 ảnh hoặc nhiều ảnh
+router.post(
+  "/:hotelId/images",
+  uploadHotelImages.array("images", 10),
+  Hotels.uploadHotelImageController
+);
+
+router.delete("/:hotelId/images/:imageId", Hotels.deleteHotelImageController);
+
 export default router;

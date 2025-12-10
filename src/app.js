@@ -125,8 +125,8 @@ app.use(express.json());
 app.use(morgan("dev"));
 
 // rate limit
-app.use("/api/auth/login", loginLimiter);
-app.use("/api/public/bookings/create-and-pay", bookingLimiter);
+// app.use("/api/auth/login", loginLimiter);
+// app.use("/api/public/bookings/create-and-pay", bookingLimiter);
 
 // routes chính
 app.use("/api", routes);

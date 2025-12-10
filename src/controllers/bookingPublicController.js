@@ -97,8 +97,7 @@ export const createOnlineAndPay = async (req, res, next) => {
             return res.status(400).json({ error: "Room not found or not belong to hotel" });
         }
 
-        console.log("hotel from FE:", hotel);
-        console.log("r.hotel from DB:", r?.hotel?.toString());
+     
 
         const start = new Date(start_day);
         const end = new Date(end_day);
@@ -123,7 +122,8 @@ export const createOnlineAndPay = async (req, res, next) => {
         const nights = nightsBetween(start, end);
         const amount = r.price * nights;
 
-        const userId = req.user?._id;
+        const userId = req.user?.id;
+        
         // tạo booking PENDING, paid=0
         const booking = await Booking.create({
             hotel,

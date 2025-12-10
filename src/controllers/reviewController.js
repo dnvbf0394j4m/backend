@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Review from "../models/Review.js";
-import {Booking,BOOKING_STATUS } from "../models/Booking.js";
-import {Hotel} from "../models/Hotel.js";
+import { Booking, BOOKING_STATUS } from "../models/Booking.js";
+import { Hotel } from "../models/Hotel.js";
 
 // Helper: tính lại averageRating + reviewCount cho hotel
 async function recalcHotelRating(hotelId) {
@@ -43,7 +43,7 @@ async function recalcHotelRating(hotelId) {
 // POST /api/reviews
 export const createReview = async (req, res) => {
   try {
-    const { bookingId, rating, comment} = req.body;
+    const { bookingId, rating, comment } = req.body;
 
     const booking = await Booking.findById(bookingId).populate("hotel user");
     if (!booking) {
@@ -51,7 +51,7 @@ export const createReview = async (req, res) => {
     }
 
     // Check booking thuộc user hiện tại
-    if (String(booking.user._id) !== String(req.user._id)) {
+    if (String(booking.user._id) !== String(req.user.id)) {
       return res.status(403).json({ error: "Bạn không được phép đánh giá booking này" });
     }
 
@@ -63,6 +63,7 @@ export const createReview = async (req, res) => {
     }
 
     // Check đã đánh giá booking này chưa
+
     const existed = await Review.findOne({ booking: booking._id });
     if (existed) {
       return res.status(400).json({ error: "Booking này đã được đánh giá" });
@@ -79,6 +80,10 @@ export const createReview = async (req, res) => {
 
     // Tính lại rating cho Hotel
     await recalcHotelRating(booking.hotel._id);
+
+    booking.reviewed = true;
+    await booking.save();
+
 
     res.status(201).json(review);
   } catch (err) {

@@ -5,6 +5,7 @@ import { HotelImage } from "../models/HotelImage.js";
 import { createHotelSchema, updateHotelSchema } from "../validations/hotel.validation.js";
 import { ROLE } from "../constants/roles.js";
 import { Booking, BOOKING_STATUS } from "../models/Booking.js";
+import fs from "fs";
 
 const toDecimal128 = (v) => {
   if (v === undefined || v === null || v === "") return undefined;
@@ -712,7 +713,7 @@ export const create = async (req, res, next) => {
 // PUT/PATCH /api/hotels/:id
 export const update = async (req, res, next) => {
   try {
-    // ❌ BỎ validate Joi – dùng trực tiếp req.body
+    //  BỎ validate Joi – dùng trực tiếp req.body
     const value = req.body || {};
     console.log("Update hotel payload:", value);
 
@@ -893,3 +894,123 @@ export const listRoomsOfHotel = async (req, res, next) => {
     next(e);
   }
 };
+
+
+// POST /api/hotels/:hotelId/images
+export const uploadHotelImageController = async (req, res, next) => {
+  try {
+    const { hotelId } = req.params;
+
+    if (!hotelId) {
+      return res.status(400).json({ error: "Missing hotelId" });
+    }
+
+    // vì route dùng uploadHotelImages.array("images", 10)
+    // => multer gán file vào req.files (mảng)
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: "No image file uploaded" });
+    }
+
+    const hotel = await Hotel.findById(hotelId);
+    if (!hotel || hotel.isDelete) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
+
+    // Tạo nhiều HotelImage tương ứng từng file
+    const docsToCreate = req.files.map((f) => ({
+      image_url: `/uploads/hotels/${f.filename}`,
+      hotel: hotel._id,
+    }));
+
+    const imgDocs = await HotelImage.insertMany(docsToCreate);
+
+    // hotel.hotelImages là mảng ObjectId -> chỉ push _id
+    hotel.hotelImages = hotel.hotelImages || [];
+    hotel.hotelImages.push(...imgDocs.map((d) => d._id));
+    await hotel.save();
+
+    // Populate lại hotel để trả cho FE
+    const out = await Hotel.findById(hotel._id)
+      .populate("company", "name")
+      .populate("hotelImages", "image_url")
+      .lean();
+
+    return res.json({
+      message: "Upload ảnh khách sạn thành công",
+      images: imgDocs, // danh sách ảnh mới tạo
+      hotel: out,
+    });
+  } catch (e) {
+    console.error("Upload hotel image error:", e);
+    next(e);
+  }
+};
+
+
+
+// DELETE /api/hotels/:hotelId/images/:imageId
+export const deleteHotelImageController = async (req, res, next) => {
+  try {
+    const { hotelId, imageId } = req.params;
+
+    if (!hotelId || !imageId) {
+      return res
+        .status(400)
+        .json({ error: "Missing hotelId or imageId" });
+    }
+
+    // Tìm hotel
+    const hotel = await Hotel.findById(hotelId);
+    if (!hotel || hotel.isDelete) {
+      return res.status(404).json({ error: "Hotel not found" });
+    }
+
+    // Tìm ảnh trong collection HotelImage
+    const imgDoc = await HotelImage.findById(imageId);
+    if (!imgDoc) {
+      return res.status(404).json({ error: "Hotel image not found" });
+    }
+
+    // Đảm bảo ảnh thuộc đúng hotel
+    if (String(imgDoc.hotel) !== String(hotel._id)) {
+      return res
+        .status(400)
+        .json({ error: "Image does not belong to this hotel" });
+    }
+
+    // Xoá file vật lý
+    const filePath = "." + imgDoc.image_url; // vì image_url lưu dạng /uploads/...
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (err) {
+      console.error("Cannot delete image file:", err);
+      // không fail request chỉ vì lỗi xoá file
+    }
+
+    // Xoá document HotelImage
+    await HotelImage.deleteOne({ _id: imageId });
+
+    // Loại imageId khỏi mảng hotel.hotelImages (mảng ObjectId)
+    hotel.hotelImages = (hotel.hotelImages || []).filter(
+      (id) => String(id) !== String(imageId)
+    );
+    await hotel.save();
+
+    // Trả về hotel đã populate lại ảnh
+    const out = await Hotel.findById(hotel._id)
+      .populate("company", "name")
+      .populate("hotelImages", "image_url")
+      .lean();
+
+    return res.json({
+      message: "Xoá ảnh thành công",
+      hotel: out,
+    });
+  } catch (e) {
+    console.error("Delete hotel image error:", e);
+    next(e);
+  }
+};
+
